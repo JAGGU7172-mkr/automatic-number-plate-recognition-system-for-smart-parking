@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Vehicle Logs - ANPR Vehicle Tracking System{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-history me-2"></i>Vehicle Logs</h1>
+        <a href="{{ url_for('security.scan') }}" class="btn btn-primary">
+            <i class="fas fa-camera me-1"></i> Scan New Vehicle
+        </a>
+    </div>
+    
+    <!-- Logs Table -->
+    <div class="card bg-dark mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Complete Log History</h5>
+        </div>
+        <div class="card-body">
+            {% if logs %}
+            <div class="table-responsive">
+                <table id="vehicle-logs-table" class="table table-dark table-hover">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>License Plate</th>
+                            <th>Event</th>
+                            <th>Status</th>
+                            <th>Confidence</th>
+                            <th>Processed By</th>
+                            <th>Image</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr class="log-entry">
+                            <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>{{ log.plate_number }}</td>
+                            <td>
+                                {% if not log.is_authorized %}
+                                    <span class="badge bg-danger">🚫 Not Allowed</span>
+                                {% else %}
+                                    {% if log.event_type == 'entry' %}
+                                        <span class="badge bg-primary">Entry</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Exit</span>
+                                    {% endif %}
+                                {% endif %}
+                            </td>    
+                            <td>
+                                {% if log.is_authorized %}
+                                <span class="badge bg-success">Authorized</span>
+                                {% else %}
+                                <span class="badge bg-danger">Unauthorized</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.confidence %}
+                                {{ "%.2f"|format(log.confidence * 100) }}%
+                                {% else %}
+                                N/A
+                                {% endif %}
+                            </td>
+                            <td>{{ log.user.username }}</td>
+                            <td>
+                                {% if log.image_path %}
+                                <a href="{{ url_for('static', filename='processed/' + log.image_path.split('\\')[-1]) }}" 
+                                target="_blank" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-image"></i> View
+                                </a>
+                                {% else %}
+                                <span class="text-muted">No image</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted p-4">
+                <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                <p>No vehicle logs recorded yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Export Options -->
+    <div class="card bg-dark mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-file-export me-2"></i>Export Options
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">Export the vehicle logs for reporting or further analysis.</p>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" id="exportCSV">
+                    <i class="fas fa-file-csv me-1"></i> Export as CSV
+                </button>
+                <button class="btn btn-outline-primary" id="exportPDF">
+                    <i class="fas fa-file-pdf me-1"></i> Export as PDF
+                </button>
+                <button class="btn btn-outline-primary" id="printLogs">
+                    <i class="fas fa-print me-1"></i> Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Add html2pdf library for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<!-- Your custom JS -->
+<script src="{{ url_for('static', filename='js/vehicle_logs.js') }}"></script>
+{% endblock %}

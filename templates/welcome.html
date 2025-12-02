@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Welcome - ANPR Vehicle Tracking System{% endblock %}
+
+{% block content %}
+<div class="welcome-container">
+    <h1 class="welcome-title">Welcome to Automated Number Plate Recognition System</h1>
+    <div id="typed-text" class="typed-text"></div>
+    <img src="{{ url_for('static', filename='images/car.png') }}" alt="Car Image" class="car-image">
+    <div class="mt-4">
+        <a href="{{ url_for('auth.login') }}" class="get-started-btn">Get Started</a>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var typed = new Typed('#typed-text', {
+            strings: [
+                "This is a project about automated number plate recognition.",
+                "It helps in recognizing number plates efficiently.",
+                "The system is designed to enhance security and streamline vehicle entry.",
+                "Our solution integrates advanced image processing techniques."
+            ],
+            typeSpeed: 50,
+            backSpeed: 25,
+            loop: true,
+            startDelay: 300,
+            fadeOut: true,
+            fadeOutDelay: 1000,
+            showCursor: true,
+            cursorChar: '▎',
+            autoInsertCss: true
+        });
+    });
+</script>
+{% endblock %}

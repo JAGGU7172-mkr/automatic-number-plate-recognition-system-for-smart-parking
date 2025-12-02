@@ -1,0 +1,100 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+venv311/
+ENV/
+env/
+.venv
+
+# Flask
+instance/
+.webassets-cache
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+instance/app.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+debug*.log
+run.log
+
+# Uploads & Processed Images
+static/uploads/*
+!static/uploads/.gitkeep
+static/processed/*
+!static/processed/.gitkeep
+
+# Test outputs
+test_output.txt
+diagnostic_*.jpg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Diagnostic & Debug files
+debug_preprocessing.py
+diagnose_anpr.py
+diagnose_upload.py
+quick_verify.py
+test_ocr_fix.py
+verify_ocr_fix.py
+
+# Paddle OCR cache
+.paddlex/
+C:\Users\*\.paddlex/
+
+# PaddleOCR models (if downloaded locally - optional, comment out if you want to commit)
+# C:\Users\jvdja\.paddlex/official_models/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Node modules (if you add any frontend build tools later)
+node_modules/
+npm-debug.log

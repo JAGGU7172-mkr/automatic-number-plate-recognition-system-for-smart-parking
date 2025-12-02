@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ANPR Vehicle Tracking System{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h1>
+        <div class="d-flex align-items-center">
+            <div class="text-muted">
+                <i class="fas fa-calendar-alt me-1"></i> {{ now.strftime('%A, %B %d, %Y') if now else '' }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card bg-dark stats-card h-100 clickable-card" onclick="window.location='{{ url_for('admin.vehicles') }}'">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted">Total Vehicles</h6>
+                            <h2 class="card-text">{{ total_vehicles }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 bg-primary bg-opacity-10">
+                            <i class="fas fa-car fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card bg-dark stats-card h-100 clickable-card" onclick="window.location='{{ url_for('admin.vehicles') }}?filter=authorized'">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted">Authorized</h6>
+                            <h2 class="card-text text-success">{{ authorized_vehicles }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 bg-success bg-opacity-10">
+                            <i class="fas fa-check-circle fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card bg-dark stats-card h-100 clickable-card" onclick="window.location='{{ url_for('admin.vehicles') }}?filter=unauthorized'">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted">Unauthorized</h6>
+                            <h2 class="card-text text-danger">{{ unauthorized_vehicles }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 bg-danger bg-opacity-10">
+                            <i class="fas fa-ban fa-2x text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card bg-dark stats-card h-100 clickable-card" onclick="window.location='{{ url_for('dashboard.vehicle_logs') }}'">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title text-muted">Today's Activity</h6>
+                            <h2 class="card-text text-info">{{ today_logs }}</h2>
+                        </div>
+                        <div class="rounded-circle p-3 bg-info bg-opacity-10">
+                            <i class="fas fa-chart-line fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-8 mb-3">
+                <div class="card bg-dark h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-chart-line me-2"></i>Today's Activity Timeline
+                        </h5>
+                        <div class="chart-legend d-flex align-items-center">
+                            <div class="me-4">
+                                <i class="fas fa-circle text-success me-1"></i> Entries
+                            </div>
+                            <div>
+                                <i class="fas fa-circle text-warning me-1"></i> Exits
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="position: relative; height: 350px;">
+                            <canvas id="activityChart" 
+                                    data-labels='{{ date_labels|safe }}'
+                                    data-entries='{{ entry_data|safe }}'
+                                    data-exits='{{ exit_data|safe }}'></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        
+        <div class="col-md-4 mb-3">
+            <div class="card bg-dark h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>Vehicle Status
+                    </h5>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-center align-items-center">
+                    <div class="chart-container" style="height: 220px;">
+                        <canvas id="vehicleStatusChart" 
+                                data-authorized="{{ authorized_vehicles }}"
+                                data-unauthorized="{{ unauthorized_vehicles }}"></canvas>
+                    </div>
+                    <!-- Removed duplicate legend -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Today's Entry/Exit Stats -->
+    <div class="row mb-4">
+        <div class="col-md-6 mb-3">
+            <div class="card bg-dark h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-sign-in-alt me-2"></i>Today's Vehicle Activity
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-4 text-center">
+                            <div class="rounded-circle p-3 bg-success bg-opacity-10 mx-auto mb-3" style="width: 60px; height: 60px;">
+                                <i class="fas fa-sign-in-alt fa-2x text-success"></i>
+                            </div>
+                            <h3>{{ today_entries }}</h3>
+                            <p class="text-muted">Authorized Entries</p>
+                        </div>
+                        <div class="col-4 text-center">
+                            <div class="rounded-circle p-3 bg-success bg-opacity-10 mx-auto mb-3" style="width: 60px; height: 60px;">
+                                <i class="fas fa-sign-out-alt fa-2x text-success"></i>
+                            </div>
+                            <h3>{{ today_exits }}</h3>
+                            <p class="text-muted">Authorized Exits</p>
+                        </div>
+                        <div class="col-4 text-center">
+                            <div class="rounded-circle p-3 bg-danger bg-opacity-10 mx-auto mb-3" style="width: 60px; height: 60px;">
+                                <i class="fas fa-ban fa-2x text-danger"></i>
+                            </div>
+                            <h3>{{ today_unauthorized }}</h3>
+                            <p class="text-muted">Unauthorized Attempts</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-3">
+            <div class="card bg-dark h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-trophy me-2"></i>Top Vehicles
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if top_vehicles %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover">
+                            <thead>
+                                <tr>
+                                    <th>License Plate</th>
+                                    <th class="text-end">Activity Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for vehicle in top_vehicles %}
+                                <tr>
+                                    <td>{{ vehicle.plate_number }}</td>
+                                    <td class="text-end">{{ vehicle.count }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted p-4">
+                        <i class="fas fa-car-crash fa-3x mb-3"></i>
+                        <p>No vehicle activity recorded yet.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card bg-dark mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-history me-2"></i>Recent Activity
+            </h5>
+            <a href="{{ url_for('dashboard.vehicle_logs') }}" class="btn btn-sm btn-outline-primary">
+                View All Logs
+            </a>
+        </div>
+        <div class="card-body">
+            {% if recent_logs %}
+            <div class="table-responsive">
+                <table class="table table-dark table-hover">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>License Plate</th>
+                            <th>Event</th>
+                            <th>Status</th>
+                            <th>Processed By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in recent_logs %}
+                        <tr class="log-entry">
+                            <td>{{ log.timestamp.strftime('%H:%M:%S') }}</td>
+                            <td>{{ log.plate_number }}</td>
+                            <td>
+                                {% if not log.is_authorized %}
+                                    <span class="badge bg-danger">🚫 Not Allowed</span>
+                                {% else %}
+                                    {% if log.event_type == 'entry' %}
+                                        <span class="badge bg-primary">Entry</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Exit</span>
+                                    {% endif %}
+                                {% endif %}
+                            </td>    
+                            <td>
+                                {% if log.is_authorized %}
+                                <span class="badge bg-success">Authorized</span>
+                                {% else %}
+                                <span class="badge bg-danger">Unauthorized</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ log.user.username }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted p-4">
+                <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                <p>No vehicle logs recorded yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// Add debugging script to check the data
+document.addEventListener('DOMContentLoaded', function() {
+    const activityChartEl = document.getElementById('activityChart');
+    if (activityChartEl) {
+        console.log("Raw data attributes:");
+        console.log("Labels:", activityChartEl.dataset.labels);
+        console.log("Entries:", activityChartEl.dataset.entries);
+        console.log("Exits:", activityChartEl.dataset.exits);
+    }
+});
+</script>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+    // Set the current date for the dashboard
+    document.addEventListener('DOMContentLoaded', function() {
+        const now = new Date();
+        const dateElement = document.querySelector('.d-flex.justify-content-between.align-items-center .text-muted');
+        if (dateElement) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            dateElement.innerHTML = '<i class="fas fa-calendar-alt me-1"></i> ' + now.toLocaleDateString('en-US', options);
+        }
+    });
+</script>
+{% endblock %}

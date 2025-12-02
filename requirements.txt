@@ -1,0 +1,9 @@
+Flask
+Flask-SQLAlchemy
+Flask-WTF
+Flask-Login
+pymysql
+ultralytics
+paddleocr
+opencv-python
+Pillow

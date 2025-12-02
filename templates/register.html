@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Register - ANPR Vehicle Tracking System{% endblock %}
+
+{% block content %}
+<div class="login-page">
+    <!-- Animated background shapes -->
+    <div class="login-bg-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+    </div>
+    
+    <div class="login-container">
+        <div class="login-logo">
+            <i class="fas fa-user-plus"></i>
+            <h2>Create Account</h2>
+            <p class="text-muted">Join the ANPR Vehicle Tracking System</p>
+        </div>
+        
+        <form method="POST" action="{{ url_for('auth.register') }}" class="needs-validation" novalidate>
+            {{ form.hidden_tag() }}
+            
+            <div class="mb-3">
+                <label for="username" class="form-label text-light">Username</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-user"></i></span>
+                    {{ form.username(class="form-control bg-dark border-info text-light", placeholder="Choose a username", autofocus=true, required=true) }}
+                </div>
+                {% if form.username.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.username.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-3">
+                <label for="email" class="form-label text-light">Email</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-envelope"></i></span>
+                    {{ form.email(class="form-control bg-dark border-info text-light", placeholder="Enter your email", required=true) }}
+                </div>
+                {% if form.email.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.email.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-3">
+                <label for="password" class="form-label text-light">Password</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-lock"></i></span>
+                    {{ form.password(class="form-control bg-dark border-info text-light", placeholder="Create a password", required=true) }}
+                </div>
+                {% if form.password.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.password.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <small class="text-muted">Password must be at least 8 characters long</small>
+            </div>
+            
+            <div class="mb-4">
+                <label for="confirm_password" class="form-label text-light">Confirm Password</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-lock"></i></span>
+                    {{ form.confirm_password(class="form-control bg-dark border-info text-light", placeholder="Confirm your password", required=true) }}
+                </div>
+                {% if form.confirm_password.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.confirm_password.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-4">
+                <label for="role" class="form-label text-light">User Role</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-user-shield"></i></span>
+                    {{ form.role(class="form-select bg-dark border-info text-light", required=true) }}
+                </div>
+                {% if form.role.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.role.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <small class="text-muted">{{ form.role.description }}</small>
+            </div>
+            
+            <div class="d-grid gap-2 mt-4">
+                {{ form.submit(class="btn btn-lg", style="background: linear-gradient(45deg, var(--bs-primary) 0%, var(--bs-info) 100%); border: none; font-weight: 500; letter-spacing: 1px;") }}
+            </div>
+            
+            <div class="text-center mt-3">
+                <p class="text-muted">Already have an account? <a href="{{ url_for('auth.login') }}" class="text-info">Log in here</a></p>
+            </div>
+            
+            <div class="text-center mt-4 text-muted">
+                <small>Secure Authentication System • &copy; {{ "2025" }}</small>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

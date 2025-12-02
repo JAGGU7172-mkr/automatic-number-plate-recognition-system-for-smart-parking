@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Vehicle - ANPR Vehicle Tracking System{% endblock %}
+
+{% block content %}
+<!-- Sound visual indicators -->
+<div id="soundIndicator" class="sound-indicator" style="display: none;">
+    <i class="fas fa-volume-up text-white"></i>
+</div>
+
+<div class="container mt-4">
+    <div class="row">
+        <!-- Scan Vehicle Form -->
+        <div class="col-lg-6 mb-4">
+            <div class="card bg-dark h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-camera me-2"></i>Scan Vehicle
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('security.scan') }}" enctype="multipart/form-data" id="scanForm">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            <label for="image" class="form-label">Upload Vehicle Image</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-image"></i></span>
+                                {{ form.image(class="form-control", accept=".jpg,.jpeg,.png", required=true, id="imageInput") }}
+                            </div>
+                            <div class="form-text">Upload a clear image of the vehicle showing the license plate. Tips: crop close to the plate, avoid glare, keep plate horizontal, and ensure good lighting. See troubleshooting below.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="event_type" class="form-label">Detected Event Type</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-sign-in-alt"></i></span>
+                                <input type="text" class="form-control bg-secondary text-white" readonly value="{{ auto_event_type|capitalize if auto_event_type else 'Waiting for scan...' }}">
+                            </div>
+                        </div>
+                        
+                        
+                        <!-- Image preview -->
+                        <div class="text-center mb-3">
+                            <img id="preview" class="image-preview img-fluid" src="#" alt="Preview">
+                        </div>
+                        
+                        <div class="d-grid">
+                            {{ form.submit(class="btn btn-primary", id="scanButton") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Scans -->
+        <div class="col-lg-6 mb-4">
+            <div class="card bg-dark h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Recent Scans
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>License Plate</th>
+                                    <th>Event</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in recent_logs %}
+                                <tr class="log-entry">
+                                    <td>{{ log.timestamp.strftime('%H:%M:%S') }}</td>
+                                    <td>{{ log.plate_number }}</td>
+                                    <td>
+                                        {% if not log.is_authorized %}
+                                            <span class="badge bg-danger">🚫 Not Allowed</span>
+                                        {% else %}
+                                            {% if log.event_type == 'entry' %}
+                                                <span class="badge bg-primary">Entry</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Exit</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>                                    
+                                    <td>
+                                        {% if log.is_authorized %}
+                                        <span class="badge bg-success">Authorized</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Unauthorized</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted p-4">
+                        <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                        <p>No vehicle scans recorded yet.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Instructions Card -->
+    <div class="card bg-dark mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-info-circle me-2"></i>How to Scan Vehicles
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle bg-primary p-2 me-3">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <h5 class="mb-0">1. Take a Clear Photo</h5>
+                    </div>
+                    <p class="text-muted">Take a clear photo of the vehicle showing the license plate. Ensure good lighting and a direct angle.</p>
+                </div>
+                
+                <div class="col-md-4 mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle bg-primary p-2 me-3">
+                            <i class="fas fa-upload"></i>
+                        </div>
+                        <h5 class="mb-0">2. Upload & Select Type</h5>
+                    </div>
+                    <p class="text-muted">Upload the image and select whether the vehicle is entering or exiting the premises.</p>
+                </div>
+                
+                <div class="col-md-4 mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="rounded-circle bg-primary p-2 me-3">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h5 class="mb-0">3. Verify Result</h5>
+                    </div>
+                    <p class="text-muted">The system will automatically detect the license plate and check if the vehicle is authorized.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Troubleshooting / Quick Tips -->
+    <div class="card bg-dark mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-tools me-2"></i>Troubleshooting & Quick Tips</h5>
+        </div>
+        <div class="card-body">
+            <ul class="text-muted">
+                <li><strong>Plate visibility:</strong> Ensure the full plate is visible and centered in the photo.</li>
+                <li><strong>Distance:</strong> Crop or take the photo so the plate occupies a significant portion of the frame (not tiny).</li>
+                <li><strong>Angle & lighting:</strong> Avoid oblique angles, heavy shadows, or glare from sunlight/flash.</li>
+                <li><strong>Image quality:</strong> Use a high-resolution image and avoid motion blur.</li>
+                <li><strong>Multiple tries:</strong> If detection fails, try a slightly rotated or closer crop of the plate.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Add audio elements for sound effects -->
+<audio id="successSound" src="{{ url_for('static', filename='audio/success.mp3') }}" preload="auto"></audio>
+<audio id="errorSound" src="{{ url_for('static', filename='audio/error.mp3') }}" preload="auto"></audio>
+
+<script>
+    // Image preview functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const scanForm = document.getElementById('scanForm');
+        const scanButton = document.getElementById('scanButton');
+        const successSound = document.getElementById('successSound');
+        const errorSound = document.getElementById('errorSound');
+        
+        // Sound indicator element
+        const soundIndicator = document.getElementById('soundIndicator');
+
+        // Play sound and show visual indicator if status is provided
+        {% if sound_status %}
+            if ("{{ sound_status }}" === "success") {
+                // Play success sound
+                successSound.play();
+                
+                // Show success indicator
+                soundIndicator.classList.add('success');
+                soundIndicator.style.display = 'flex';
+                
+                // Hide indicator after animation completes
+                setTimeout(() => {
+                    soundIndicator.style.display = 'none';
+                    soundIndicator.classList.remove('success');
+                }, 1000);
+            } else if ("{{ sound_status }}" === "error") {
+                // Play error sound
+                errorSound.play();
+                
+                // Show error indicator
+                soundIndicator.classList.add('error');
+                soundIndicator.style.display = 'flex';
+                
+                // Hide indicator after animation completes
+                setTimeout(() => {
+                    soundIndicator.style.display = 'none';
+                    soundIndicator.classList.remove('error');
+                }, 1000);
+            }
+        {% endif %}
+        
+        if (imageInput && preview) {
+            imageInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    };
+                    
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+        }
+        
+        // Add loading state to form on submission
+        if (scanForm && scanButton) {
+            scanForm.addEventListener('submit', function() {
+                scanButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+                scanButton.disabled = true;
+            });
+        }
+    });
+</script>
+{% endblock %}

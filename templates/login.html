@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Login - ANPR Vehicle Tracking System{% endblock %}
+
+{% block content %}
+<div class="login-page">
+    <!-- Animated background shapes -->
+    <div class="login-bg-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+    </div>
+    
+    <div class="login-container">
+        <div class="login-logo">
+            <i class="fas fa-car-alt"></i>
+            <h2>ANPR System</h2>
+            <p class="text-muted">Vehicle Tracking & Management</p>
+        </div>
+        
+        <form method="POST" action="{{ url_for('auth.login') }}" class="needs-validation" novalidate>
+            {{ form.hidden_tag() }}
+            
+            <div class="mb-4">
+                <label for="username" class="form-label text-light">Username</label>
+                <div class="input-group input-group-lg">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-user"></i></span>
+                    {{ form.username(class="form-control bg-dark border-info text-light", placeholder="Enter your username", autofocus=true, required=true) }}
+                </div>
+                {% if form.username.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.username.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-4">
+                <label for="password" class="form-label text-light">Password</label>
+                <div class="input-group input-group-lg">
+                    <span class="input-group-text bg-dark border-info text-info"><i class="fas fa-lock"></i></span>
+                    {{ form.password(class="form-control bg-dark border-info text-light", placeholder="Enter your password", required=true) }}
+                </div>
+                {% if form.password.errors %}
+                <div class="invalid-feedback d-block text-warning">
+                    {% for error in form.password.errors %}
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="d-grid gap-2 mt-4">
+                {{ form.submit(class="btn btn-lg", style="background: linear-gradient(45deg, var(--bs-primary) 0%, var(--bs-info) 100%); border: none; font-weight: 500; letter-spacing: 1px;") }}
+            </div>
+            
+            <div class="text-center mt-3">
+                <p class="text-muted">Don't have an account? <a href="{{ url_for('auth.register') }}" class="text-info">Register here</a></p>
+            </div>
+            
+            <div class="text-center mt-4 text-muted">
+                <small>Secure Authentication System • &copy; {{ "2025" }}</small>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
