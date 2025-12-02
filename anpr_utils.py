@@ -174,156 +174,229 @@ def deskew_image(gray):
 
 
 def try_ocr_on_variations(roi):
-    """Try OCR on several transformed versions of the ROI and return the best/first valid result.
-
-    This keeps using the same PaddleOCR instance and models; it just tries scaled, padded,
-    deskewed and small-rotation variants to improve recognition on tough images.
+    """Try OCR on fastest candidates first, stop when valid plate found.
+    
+    Uses aggressive early exit: tests original -> preprocessed -> scaled variants.
+    Only tests rotations/deskew if initial attempts fail, to minimize OCR calls.
+    Includes safety checks to prevent crashes.
     """
     if roi is None or roi.size == 0:
         return None
 
-    candidates = []
-
-    # padded original (small padding)
     try:
-        candidates.append(pad_roi(roi, pad=8))
-    except Exception:
-        pass
+        # Validate ROI dimensions
+        if len(roi.shape) < 2:
+            return None
+        h, w = roi.shape[:2]
+        if h < 5 or w < 5:
+            return None
+    except Exception as e:
+        logging.error(f"Invalid ROI shape: {e}")
+        return None
 
-    # resize variations (upsample helps OCR)
-    for scale in (1.0, 1.5, 2.0):
-        try:
-            if scale == 1.0:
-                candidates.append(roi)
-            else:
-                h, w = roi.shape[:2]
-                resized = cv2.resize(roi, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_CUBIC)
-                candidates.append(resized)
-        except Exception:
-            continue
-
-    # add preprocess_for_ocr output (already returns RGB)
+    # Fast-path candidates to try first (in order)
+    fast_candidates = []
+    
+    # 1. Original unmodified ROI (fastest)
+    fast_candidates.append(('original', roi))
+    
+    # 2. Preprocessed (good results, still fast)
     try:
         pre_rgb = preprocess_for_ocr(roi)
-        pre_bgr = cv2.cvtColor(pre_rgb, cv2.COLOR_RGB2BGR)
-        candidates.append(pre_bgr)
-    except Exception:
+        if pre_rgb is not None and pre_rgb.size > 0:
+            pre_bgr = cv2.cvtColor(pre_rgb, cv2.COLOR_RGB2BGR)
+            fast_candidates.append(('preprocessed', pre_bgr))
+    except Exception as e:
+        logging.debug(f"Preprocessing failed: {e}")
         pass
-
-    # deskewed version
+    
+    # 3. Padded original (often helps with edge text)
     try:
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        desk = deskew_image(gray)
-        desk_bgr = cv2.cvtColor(desk, cv2.COLOR_GRAY2BGR)
-        candidates.append(desk_bgr)
-    except Exception:
+        padded = pad_roi(roi, pad=8)
+        if padded is not None and padded.size > 0:
+            fast_candidates.append(('padded', padded))
+    except Exception as e:
+        logging.debug(f"Padding failed: {e}")
         pass
-
-    # small rotations around center
-    angles = (-8, -4, 0, 4, 8)
-    base_candidates = list(candidates)
-    for img in base_candidates:
-        if img is None:
-            continue
-        h, w = img.shape[:2]
-        center = (w // 2, h // 2)
-        for a in angles:
-            if a == 0:
-                continue
-            try:
-                M = cv2.getRotationMatrix2D(center, a, 1.0)
-                rot = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-                candidates.append(rot)
-            except Exception:
-                continue
-
-    # If ROI is very large, try to find text-like subregions inside it
-    def extract_text_like_regions(img):
-        """Return list of candidate sub-ROIs inside a large ROI by using morphology and contours."""
-        subs = []
-        try:
-            g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # smooth and gradient
-            blur = cv2.GaussianBlur(g, (3, 3), 0)
-            grad = cv2.morphologyEx(blur, cv2.MORPH_GRADIENT, cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)))
-            _, th = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            # close gaps
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
-            closed = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel)
-            contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            h, w = img.shape[:2]
-            for cnt in contours:
-                x, y, ww, hh = cv2.boundingRect(cnt)
-                # plausible plate aspect ratio and size
-                if ww < 0.3 * w and hh < 0.6 * h and ww > 30 and hh > 10:
-                    subs.append(img[y:y+hh, x:x+ww])
-        except Exception:
-            pass
-        return subs
-
-    # If ROI area is very large, extract subregions and add to candidates
+    
+    # 4. 1.5x upscale (helps small text, faster than 2x)
     try:
         h_roi, w_roi = roi.shape[:2]
-        if h_roi * w_roi > 2000 * 2000 or (h_roi > 1000 and w_roi > 1000):
-            subregions = extract_text_like_regions(roi)
-            for s in subregions:
-                candidates.append(s)
-    except Exception:
+        if h_roi > 0 and w_roi > 0:
+            resized = cv2.resize(roi, (max(1, int(w_roi * 1.5)), max(1, int(h_roi * 1.5))), interpolation=cv2.INTER_CUBIC)
+            if resized is not None and resized.size > 0:
+                fast_candidates.append(('scaled_1.5x', resized))
+    except Exception as e:
+        logging.debug(f"Scaling failed: {e}")
         pass
 
-    # Deduplicate by shape to reduce redundant OCR calls
-    seen_shapes = set()
-    final_candidates = []
-    for c in candidates:
-        if c is None or c.size == 0:
-            continue
-        key = (c.shape[0], c.shape[1])
-        if key in seen_shapes:
-            final_candidates.append(c)
-            continue
-        seen_shapes.add(key)
-        final_candidates.append(c)
-
+    # Try fast candidates first - exit immediately if valid plate found
     best_candidate = None
-    for img in final_candidates:
+    for name, img in fast_candidates:
         try:
-            # run_paddle_ocr expects RGB arrays
-            if img.shape[2] == 3:
+            if img is None or img.size == 0:
+                continue
+                
+            if len(img.shape) >= 3 and img.shape[2] == 3:
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             else:
                 rgb = img
-        except Exception:
-            rgb = img
+        except Exception as e:
+            logging.debug(f"Color conversion failed for {name}: {e}")
+            continue
 
         try:
             text = run_paddle_ocr(rgb)
         except Exception as e:
-            logging.debug(f"Error running OCR on candidate: {e}")
+            logging.debug(f"Error running OCR on {name}: {e}")
             text = None
 
         if not text:
             continue
 
-        tnorm = text.replace(" ", "").upper()
-        # If a valid plate substring exists inside OCR text, prefer it
-        found = find_plate_in_text(tnorm)
-        if found:
-            tnorm = found
+        try:
+            tnorm = text.replace(" ", "").upper()
+            found = find_plate_in_text(tnorm)
+            if found:
+                tnorm = found
 
-        # prefer validated plate text
-        if is_valid_plate_text(tnorm):
-            return format_plate_text(tnorm)
+            # Valid plate found - return immediately (EARLY EXIT)
+            if is_valid_plate_text(tnorm):
+                return format_plate_text(tnorm)
 
-        # otherwise keep longest plausible (store compact form)
-        if best_candidate is None or len(tnorm) > len(best_candidate):
-            best_candidate = tnorm
+            # Track best non-validated candidate for fallback
+            if best_candidate is None or len(tnorm) > len(best_candidate):
+                best_candidate = tnorm
+        except Exception as e:
+            logging.debug(f"Error processing OCR text: {e}")
+            continue
 
-    # return best candidate formatted if possible
-    if best_candidate:
-        found = find_plate_in_text(best_candidate)
-        if found:
-            return format_plate_text(found)
-        return format_plate_text(best_candidate)
+    # Only try slower variations if fast path didn't find valid plate
+    slow_candidates = []
+    
+    # 5. Deskewed (can be slow, skip if fast path worked well)
+    if best_candidate is None or len(best_candidate) < 8:
+        try:
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            desk = deskew_image(gray)
+            if desk is not None and desk.size > 0:
+                desk_bgr = cv2.cvtColor(desk, cv2.COLOR_GRAY2BGR)
+                slow_candidates.append(('deskewed', desk_bgr))
+        except Exception as e:
+            logging.debug(f"Deskewing failed: {e}")
+            pass
+    
+    # 6. Small rotations (limited to ±4 degrees, skip ±8)
+    if best_candidate is None or len(best_candidate) < 8:
+        try:
+            h_roi, w_roi = roi.shape[:2]
+            center = (w_roi // 2, h_roi // 2)
+            for a in (-4, 4):  # Only ±4, not ±8
+                try:
+                    M = cv2.getRotationMatrix2D(center, a, 1.0)
+                    rot = cv2.warpAffine(roi, M, (w_roi, h_roi), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+                    if rot is not None and rot.size > 0:
+                        slow_candidates.append((f'rotated_{a}', rot))
+                except Exception as e:
+                    logging.debug(f"Rotation {a} failed: {e}")
+                    continue
+        except Exception as e:
+            logging.debug(f"Rotation setup failed: {e}")
+            pass
+    
+    # 7. Extract text-like subregions from very large ROIs (only if needed)
+    def extract_text_like_regions(img, max_regions=2):
+        """Return max 2 best candidate sub-ROIs to avoid excessive OCR calls."""
+        subs = []
+        try:
+            g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            blur = cv2.GaussianBlur(g, (3, 3), 0)
+            grad = cv2.morphologyEx(blur, cv2.MORPH_GRADIENT, cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)))
+            _, th = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
+            closed = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel)
+            contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            img_h, img_w = img.shape[:2]
+            rects = []
+            for cnt in contours:
+                x, y, ww, hh = cv2.boundingRect(cnt)
+                if ww < 0.3 * img_w and hh < 0.6 * img_h and ww > 30 and hh > 10:
+                    area = ww * hh
+                    sub = img[max(0, y):min(img_h, y+hh), max(0, x):min(img_w, x+ww)]
+                    if sub.size > 0:
+                        rects.append((area, sub))
+            # Return only top 2 by area to limit OCR calls
+            for area, sub in sorted(rects, reverse=True)[:max_regions]:
+                subs.append(sub)
+        except Exception as e:
+            logging.debug(f"Subregion extraction failed: {e}")
+            pass
+        return subs
+
+    if best_candidate is None or len(best_candidate) < 8:
+        try:
+            h_roi, w_roi = roi.shape[:2]
+            if h_roi * w_roi > 2000 * 2000 or (h_roi > 1000 and w_roi > 1000):
+                subregions = extract_text_like_regions(roi, max_regions=2)
+                for i, s in enumerate(subregions):
+                    if s is not None and s.size > 0:
+                        slow_candidates.append((f'subregion_{i}', s))
+        except Exception as e:
+            logging.debug(f"Large ROI subregion processing failed: {e}")
+            pass
+
+    # Try slow candidates with limit to 4 total attempts
+    for i, (name, img) in enumerate(slow_candidates):
+        if i >= 4:  # Absolute limit on slow attempts
+            break
+        
+        try:
+            if img is None or img.size == 0:
+                continue
+                
+            if len(img.shape) >= 3 and img.shape[2] == 3:
+                rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            else:
+                rgb = img
+        except Exception as e:
+            logging.debug(f"Color conversion failed for slow candidate {name}: {e}")
+            continue
+
+        try:
+            text = run_paddle_ocr(rgb)
+        except Exception as e:
+            logging.debug(f"Error running OCR on {name}: {e}")
+            text = None
+
+        if not text:
+            continue
+
+        try:
+            tnorm = text.replace(" ", "").upper()
+            found = find_plate_in_text(tnorm)
+            if found:
+                tnorm = found
+
+            if is_valid_plate_text(tnorm):
+                return format_plate_text(tnorm)
+
+            if best_candidate is None or len(tnorm) > len(best_candidate):
+                best_candidate = tnorm
+        except Exception as e:
+            logging.debug(f"Error processing slow OCR text: {e}")
+            continue
+
+    # Return best candidate if any
+    try:
+        if best_candidate:
+            found = find_plate_in_text(best_candidate)
+            if found:
+                return format_plate_text(found)
+            return format_plate_text(best_candidate)
+    except Exception as e:
+        logging.error(f"Error formatting best candidate: {e}")
+        return None
+    
     return None
 
 # ✅ PaddleOCR Function
@@ -454,94 +527,145 @@ def detect_license_plate(image_path):
             logging.error(f"Failed to read image: {image_path}")
             return None, 0.0, None
 
+        if image.size == 0 or len(image.shape) < 2:
+            logging.error(f"Invalid image dimensions: {image.shape}")
+            return None, 0.0, None
+
         output_image = image.copy()
         yolo = get_yolo_model()
         if yolo is None:
             logging.error("YOLO model is not available")
             return None, 0.0, None
 
-        results = yolo(image)
+        try:
+            results = yolo(image)
+        except Exception as e:
+            logging.error(f"YOLO detection failed: {e}", exc_info=True)
+            return None, 0.0, None
+
         detected_plate = None
         detected_confidence = 0.0
 
         found = False
         best_unvalidated = None
-        for res in results:
-            for box in res.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                conf = box.conf[0].item()
-                logging.info(f"YOLO detection confidence: {conf}")
-
-                if conf < 0.5:
+        
+        if not results or len(results) == 0:
+            logging.info("YOLO returned no results")
+            return None, 0.0, None
+        
+        try:
+            for res in results:
+                if not hasattr(res, 'boxes'):
                     continue
+                    
+                for box in res.boxes:
+                    try:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        conf = box.conf[0].item()
+                        logging.info(f"YOLO detection confidence: {conf}")
 
-                # Draw bounding box
-                cv2.rectangle(output_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        if conf < 0.5:
+                            continue
 
-                # Extract plate region and run OCR
-                plate_roi = image[y1:y2, x1:x2]
-                
-                # Check if ROI is valid (has non-zero width and height)
-                if plate_roi.size == 0 or plate_roi.shape[0] < 5 or plate_roi.shape[1] < 5:
-                    logging.warning(f"Detected ROI too small: {plate_roi.shape}. Skipping OCR.")
-                    continue
-                
-                # Try OCR on multiple ROI variations (scales/padding/deskew/rotations)
-                try:
-                    candidate = try_ocr_on_variations(plate_roi)
-                except Exception as e:
-                    logging.error(f"Error during OCR variations: {e}", exc_info=True)
-                    candidate = None
+                        # Validate coordinates
+                        if x1 < 0 or y1 < 0 or x2 <= x1 or y2 <= y1:
+                            logging.warning(f"Invalid box coordinates: {x1},{y1},{x2},{y2}")
+                            continue
 
-                if candidate:
-                    # store best unvalidated as fallback
-                    if best_unvalidated is None or len(candidate) > len(best_unvalidated):
-                        best_unvalidated = candidate
+                        # Draw bounding box
+                        try:
+                            cv2.rectangle(output_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        except Exception as e:
+                            logging.debug(f"Failed to draw box: {e}")
 
-                    # prefer validated plate text
-                    if is_valid_plate_text(candidate):
-                        detected_plate = format_plate_text(candidate)
-                        detected_confidence = conf
-                        cv2.putText(output_image, f"Plate: {detected_plate}",
-                                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.6, (255, 255, 0), 2)
-                        found = True
-                        break
-                    else:
-                        # See if a valid substring can be found inside the OCR candidate
-                        inner = find_plate_in_text(candidate)
-                        if inner and is_valid_plate_text(inner):
-                            detected_plate = format_plate_text(inner)
-                            detected_confidence = conf
-                            cv2.putText(output_image, f"Plate: {detected_plate}",
-                                        (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.6, (255, 255, 0), 2)
-                            found = True
-                            break
-                        logging.warning(f"OCR returned text but failed validation: {candidate} (not a valid plate format)")
-            if found:
-                break
+                        # Extract plate region and run OCR
+                        try:
+                            plate_roi = image[y1:y2, x1:x2]
+                        except Exception as e:
+                            logging.warning(f"Failed to extract ROI: {e}")
+                            continue
+                        
+                        # Check if ROI is valid (has non-zero width and height)
+                        if plate_roi is None or plate_roi.size == 0 or plate_roi.shape[0] < 5 or plate_roi.shape[1] < 5:
+                            logging.warning(f"Detected ROI too small: {plate_roi.shape if plate_roi is not None else 'None'}. Skipping OCR.")
+                            continue
+                        
+                        # Try OCR on multiple ROI variations (scales/padding/deskew/rotations)
+                        try:
+                            candidate = try_ocr_on_variations(plate_roi)
+                        except Exception as e:
+                            logging.error(f"Error during OCR variations: {e}", exc_info=True)
+                            candidate = None
+
+                        if candidate:
+                            # store best unvalidated as fallback
+                            if best_unvalidated is None or len(candidate) > len(best_unvalidated):
+                                best_unvalidated = candidate
+
+                            # prefer validated plate text
+                            if is_valid_plate_text(candidate):
+                                detected_plate = format_plate_text(candidate)
+                                detected_confidence = conf
+                                try:
+                                    cv2.putText(output_image, f"Plate: {detected_plate}",
+                                                (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                                                0.6, (255, 255, 0), 2)
+                                except Exception as e:
+                                    logging.debug(f"Failed to put text: {e}")
+                                found = True
+                                break
+                            else:
+                                # See if a valid substring can be found inside the OCR candidate
+                                inner = find_plate_in_text(candidate)
+                                if inner and is_valid_plate_text(inner):
+                                    detected_plate = format_plate_text(inner)
+                                    detected_confidence = conf
+                                    try:
+                                        cv2.putText(output_image, f"Plate: {detected_plate}",
+                                                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                                                    0.6, (255, 255, 0), 2)
+                                    except Exception as e:
+                                        logging.debug(f"Failed to put text: {e}")
+                                    found = True
+                                    break
+                                logging.warning(f"OCR returned text but failed validation: {candidate} (not a valid plate format)")
+                    except Exception as e:
+                        logging.error(f"Error processing box: {e}", exc_info=True)
+                        continue
+                        
+                if found:
+                    break
+        except Exception as e:
+            logging.error(f"Error iterating results: {e}", exc_info=True)
+            
         # If we didn't find a validated plate, fall back to best unvalidated candidate
         if not detected_plate and best_unvalidated:
-            # If we can find a valid plate substring inside best_unvalidated, use it
-            inner = find_plate_in_text(best_unvalidated)
-            if inner and is_valid_plate_text(inner):
-                fmt = format_plate_text(inner)
-                logging.info(f"Falling back to inner validated OCR candidate: {fmt}")
-                detected_plate = fmt
-            else:
-                # Loose acceptance criteria: reasonable length and mostly alphanumeric
-                alnum = sum(1 for c in best_unvalidated if c.isalnum())
-                if len(best_unvalidated) >= 5 and alnum >= len(best_unvalidated) * 0.5:
-                    logging.info(f"Falling back to unvalidated OCR candidate: {best_unvalidated}")
-                    detected_plate = format_plate_text(best_unvalidated)
+            try:
+                # If we can find a valid plate substring inside best_unvalidated, use it
+                inner = find_plate_in_text(best_unvalidated)
+                if inner and is_valid_plate_text(inner):
+                    fmt = format_plate_text(inner)
+                    logging.info(f"Falling back to inner validated OCR candidate: {fmt}")
+                    detected_plate = fmt
+                else:
+                    # Loose acceptance criteria: reasonable length and mostly alphanumeric
+                    alnum = sum(1 for c in best_unvalidated if c.isalnum())
+                    if len(best_unvalidated) >= 5 and alnum >= len(best_unvalidated) * 0.5:
+                        logging.info(f"Falling back to unvalidated OCR candidate: {best_unvalidated}")
+                        detected_plate = format_plate_text(best_unvalidated)
+            except Exception as e:
+                logging.error(f"Error with fallback processing: {e}", exc_info=True)
 
         # Save processed image
-        processed_dir = os.path.join("static", "processed")
-        os.makedirs(processed_dir, exist_ok=True)
-        processed_image_path = os.path.join(processed_dir, f"processed_{uuid.uuid4().hex}.jpg")
-        cv2.imwrite(processed_image_path, output_image)
-        logging.info(f"Processed image saved: {processed_image_path}")
+        try:
+            processed_dir = os.path.join("static", "processed")
+            os.makedirs(processed_dir, exist_ok=True)
+            processed_image_path = os.path.join(processed_dir, f"processed_{uuid.uuid4().hex}.jpg")
+            cv2.imwrite(processed_image_path, output_image)
+            logging.info(f"Processed image saved: {processed_image_path}")
+        except Exception as e:
+            logging.error(f"Failed to save processed image: {e}", exc_info=True)
+            processed_image_path = None
 
         return detected_plate, detected_confidence, processed_image_path
 

@@ -39,11 +39,14 @@ def scan():
                 plate_number, confidence, processed_relative_path = detect_license_plate(saved_path)
 
                 if plate_number:
-                    vehicle = Vehicle.query.filter_by(plate_number=plate_number).first()
+                    # Remove spaces from plate number for database lookup
+                    # (stored plates are without spaces, e.g., "HR71AB0001")
+                    plate_lookup = plate_number.replace(" ", "").upper()
+                    vehicle = Vehicle.query.filter_by(plate_number=plate_lookup).first()
 
                     # Determine auto entry/exit
                     # Determine auto entry/exit (Fixed Logic)
-                    last_log = VehicleLog.query.filter_by(plate_number=plate_number).order_by(desc(VehicleLog.timestamp)).first()
+                    last_log = VehicleLog.query.filter_by(plate_number=plate_lookup).order_by(desc(VehicleLog.timestamp)).first()
                     if not last_log or last_log.event_type == "exit":
                         event_type = "entry"
                     elif last_log.event_type == "entry":
@@ -53,7 +56,7 @@ def scan():
 
                     # Save vehicle log
                     log_entry = VehicleLog(
-                        plate_number=plate_number,
+                        plate_number=plate_lookup,
                         vehicle_id=vehicle.id if vehicle else None,
                         is_authorized=vehicle.is_authorized if vehicle else False,
                         confidence=confidence,
